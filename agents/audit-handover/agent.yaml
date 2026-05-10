@@ -47,7 +47,7 @@ mcp_servers:
   # list_events). See claude-managed-agents/docs/sdk-reference.md.
   - type: url
     name: ntropii
-    url: https://mcp.test.ntropii.com/v1   # test cluster ntro-mcp
+    url: https://mcp.test.ntropii.com/mcp   # test cluster ntro-mcp (Streamable HTTP MCP endpoint)
 
 skills:
   # Anthropic's pre-built docx skill — richer document generation

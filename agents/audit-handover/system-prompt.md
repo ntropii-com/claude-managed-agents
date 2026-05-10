@@ -135,7 +135,7 @@ If none, write: "None flagged."
 
 ### 3. Render the .docx with python-docx
 
-Write a script that uses `python-docx` to convert your markdown to a `.docx`. Save it to `/tmp/audit-handover-<period>.docx` and **attach it to your Run output** (Anthropic's standard mechanism — the file shows up in the Run's `output.files`).
+Write a script that uses `python-docx` to convert your markdown to a `.docx`. Save it directly under `/mnt/session/outputs/audit-handover-<period>.docx` — Anthropic's runtime auto-promotes everything in `/mnt/session/outputs/` into the session's file list, which is what the Ntropii adapter pulls from. Writing to `/tmp` and forgetting to copy means the file disappears with the sandbox.
 
 Skeleton:
 
@@ -152,7 +152,7 @@ doc = Document()
 # Convert markdown headings + paragraphs + tables.
 # python-docx supports doc.add_heading, doc.add_paragraph, doc.add_table.
 build_docx_from_markdown(doc, md)  # your helper
-out = f"/tmp/audit-handover-{period['period']}.docx"
+out = f"/mnt/session/outputs/audit-handover-{period['period']}.docx"
 doc.save(out)
 ```
 
