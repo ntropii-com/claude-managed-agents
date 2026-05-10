@@ -31,7 +31,7 @@ Add **one** entry pointing at the Ntropii MCP server:
 |---|---|
 | **Type** | `url` |
 | **Name** | `ntropii` (must match `mcp_server_name` in the Tools tab) |
-| **URL** | `https://mcp.ntropii.com/v1` (placeholder — confirm with Ntropii ops) |
+| **URL** | `https://mcp.test.ntropii.com/v1` (test cluster ntro-mcp) |
 
 Auth is **not** configured here. The Vault attached at session start carries the Ntropii API key, and Anthropic's runtime injects it into MCP server requests automatically.
 
@@ -40,7 +40,7 @@ API-body equivalent:
 ```json
 {
   "mcp_servers": [
-    {"type": "url", "name": "ntropii", "url": "https://mcp.ntropii.com/v1"}
+    {"type": "url", "name": "ntropii", "url": "https://mcp.test.ntropii.com/v1"}
   ]
 }
 ```

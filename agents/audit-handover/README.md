@@ -76,7 +76,7 @@ The runbook's `draft_auditor_handover` step reads `ctx.config.audit_agent_id` an
 | `agent.yaml` | Anthropic API-shaped metadata. Mirror values into the Console form, or POST it as the body of `/v1/agents`. |
 | `system-prompt.md` | The agent's system message |
 | `tools.md` | Tools + MCP server + skills reference |
-| `handover-template.md` | Markdown skeleton the agent fills in section-by-section |
+| `handover-template.md` | Markdown skeleton (also inlined into `system-prompt.md` since the agent has no file system access at runtime — keep them in sync) |
 | `README.md` | This file |
 
 ## Updates

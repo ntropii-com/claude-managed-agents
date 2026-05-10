@@ -34,7 +34,7 @@ Two transports the agent uses:
 ## Setup checklist (one-time per agent)
 
 1. **Create a Vault** on Anthropic holding the Ntropii API key. Vaults are global to your Anthropic workspace; one Vault can back many agents/sessions.
-2. **Create an Environment** on Anthropic with pip packages: `ntro python-docx` (and any other helpers the agent needs). Networking should allow outbound to your Ntropii MCP server (`https://mcp.ntropii.com` or wherever it's hosted).
+2. **Create an Environment** on Anthropic with pip packages: `ntro python-docx` (and any other helpers the agent needs). Networking should allow outbound to your Ntropii MCP server (`https://mcp.test.ntropii.com` or wherever it's hosted).
 3. **Create the Agent** on Anthropic — paste `system-prompt.md`, declare `tools` (toolset + mcp_toolset), `mcp_servers` (pointing at ntropii), `skills` (optionally Anthropic's `docx`).
 4. **Register the agent with Ntropii** — `ntro agent create --path anthropic://agents/<id> --tenant <slug>` returns a Ntropii API key. Stash it in the Vault from step 1.
 5. **Wire it into a runbook** — add the agent_id to the entity's config so the runbook step picks it up. The runbook calls `ntro.workflow.agents.invoke(agent_id, ...)` which starts an Anthropic session (`{agent_id, environment_id, vault_ids}`) under the hood.
