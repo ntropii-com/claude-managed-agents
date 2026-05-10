@@ -1,73 +1,42 @@
 # audit-handover Claude MA — provisioning + registration
 
-Source artefacts for the `audit-handover` Claude Managed Agent — produces a Ntropii-style auditor handover .docx for a completed NAV close.
+Produces a Ntropii-style auditor handover .docx for a completed NAV close.
 
-## ⚠ Architectural blocker (open)
+## Setup checklist
 
-The `POST /v1/agents` create body for Managed Agents has only these fields: `name`, `model`, `system`, `tools`, `description`, `mcp_servers`, `skills`, `metadata`. **There is no first-class field for**:
+These are one-time steps to get the agent live on Anthropic + registered with Ntropii. Steps 1–3 are on the Anthropic side; step 4 is the Ntropii registration; step 5 wires it into a runbook.
 
-- **Pip dependencies** (so `ntro` can be installed in the agent's Python sandbox)
-- **Environment variables** (so `NTRO_API_KEY` / `NTRO_TENANT_URL` can authenticate the SDK)
+### 1. Vault — store the Ntropii API key
 
-Phase 2 / [N-76](https://linear.app/byng/issue/N-76) was scoped assuming both. They aren't there. Until that's resolved, the agent can be **registered** on Anthropic + Ntropii, but `import ntro` inside the agent's `bash python …` will fail (no `ntro` in the sandbox) — i.e. the agent won't actually be functional. Path-forward options under investigation:
+Anthropic Console → Vaults → Create. The vault holds the Ntropii API key (filled in step 4 below).
 
-1. **MCP server bridge** — Ntropii ships a public MCP server with the same tool surface as `ntro.workflow.steps.*` / `tasks.*`; the agent talks to it via `mcp_servers` (which IS a first-class field). Drops the SDK-over-pip approach but keeps the same wire protocol. Probably the right path.
-2. **Anthropic Skills** — investigate whether `skills` can carry pip deps + env. Likely not, but worth a 30-min look.
-3. **Wait for Anthropic** — Managed Agents is in beta; pip + env may land. Not a path we can ship on.
+### 2. Environment — pip packages + networking
 
-The Phase 2 framing is being revised toward (1) — see N-76 description for the updated approach.
+Anthropic Console → Environments → Create. In the **Packages** section, set the manager to `pip` and add:
 
-## What's in this folder
-
-| File | Purpose |
-|---|---|
-| `agent.yaml` | Anthropic API-shaped metadata. Matches `POST /v1/agents` body fields exactly. |
-| `system-prompt.md` | The agent's system message (paste into `agent.yaml.system` or the Console form) |
-| `tools.md` | Toolset config notes |
-| `handover-template.md` | Markdown skeleton the agent fills in |
-| `README.md` | This file |
-
-## Provisioning the agent (despite the blocker above)
-
-You can still register the agent shell on Anthropic to validate the rest of the flow:
-
-### Console path
-
-1. Open <https://console.anthropic.com> → Agents → Create.
-2. **Name:** `audit-handover`
-3. **Description:** copy from `agent.yaml.description`
-4. **Model:** `claude-sonnet-4-6`
-5. **System message:** paste the full contents of `system-prompt.md`
-6. **Toolset:** `agent_toolset_20260401` — enable `bash`, `write`, `read`
-7. Capture the resulting `agent_id` (e.g. `agent_01HX…`)
-
-### API path (curl)
-
-```bash
-SYSTEM_PROMPT=$(cat system-prompt.md)
-
-curl -sS https://api.anthropic.com/v1/agents \
-  -H "x-api-key: $ANTHROPIC_API_KEY" \
-  -H "anthropic-beta: managed-agents-2026-04-01" \
-  -H "content-type: application/json" \
-  -d "$(jq -n \
-        --arg name        "audit-handover" \
-        --arg model       "claude-sonnet-4-6" \
-        --arg system      "$SYSTEM_PROMPT" \
-        --arg description "Produces an auditor handover .docx for a completed NAV close." \
-        --argjson tools '[{
-          "type":"agent_toolset_20260401",
-          "configs":[
-            {"name":"bash","enabled":true},
-            {"name":"write","enabled":true},
-            {"name":"read","enabled":true}
-          ]
-        }]' \
-        '{name:$name, model:$model, system:$system, description:$description, tools:$tools}')" \
-  | jq -r '.id // .error // .'
+```
+ntro python-docx
 ```
 
-## Register the agent with Ntropii (when N-76 ships)
+Pin if you want: `ntro==0.1.0 python-docx==1.1.0`. Networking should allow outbound to your Ntropii MCP server URL.
+
+### 3. Agent — paste from this folder
+
+Anthropic Console → Agents → Create. Map fields directly from this folder's `agent.yaml`:
+
+| Console field | Source |
+|---|---|
+| **Name** | `audit-handover` |
+| **Description** | from `agent.yaml.description` |
+| **Model** | `claude-sonnet-4-6` |
+| **System message** | paste the full contents of `system-prompt.md` |
+| **Tools** | `agent_toolset_20260401` with `bash`, `write`, `read` enabled, plus an `mcp_toolset` entry referencing the `ntropii` MCP server |
+| **MCP servers** | one entry: `{type: url, name: ntropii, url: <Ntropii MCP URL>}` |
+| **Skills** | Anthropic pre-built `docx` (optional but recommended for richer document generation) |
+
+After creation, capture the resulting `agent_id` (e.g. `agent_01HX…`).
+
+### 4. Register the agent with Ntropii
 
 ```bash
 ntro agent create \
@@ -76,15 +45,54 @@ ntro agent create \
   --name audit-handover
 ```
 
-This returns an Ntropii API key. With Phase 2's MCP-bridge approach, that key gets configured on the agent's `mcp_servers[].auth` rather than as an env var.
+This returns:
 
-## What works today vs what waits for N-76
+```json
+{
+  "id": "...",
+  "kind": "claude_managed",
+  "externalRef": "anthropic://agents/<agent_id>",
+  "apiKey": "ntro_api_key_…"   ← shown ONCE; not retrievable later
+}
+```
+
+Take the `apiKey` and store it in the **Vault** from step 1. Anthropic's runtime will inject it into MCP server auth at session start.
+
+### 5. Wire into nav-monthly-pack
+
+Add the agent id to byng's 4HC entity config so the runbook step picks it up:
+
+```bash
+# In the workspace API:
+# PATCH /workspace/tenants/<byng>/entities/<4hc> with config.audit_agent_id=<id>
+```
+
+The runbook's `draft_auditor_handover` step reads `ctx.config.audit_agent_id` and calls `ntro.workflow.agents.invoke(...)`. Ntropii's worker-side Anthropic adapter starts the session with `{agent_id, environment_id, vault_ids}` so all three are connected.
+
+## Files in this folder
+
+| File | Purpose |
+|---|---|
+| `agent.yaml` | Anthropic API-shaped metadata. Mirror values into the Console form, or POST it as the body of `/v1/agents`. |
+| `system-prompt.md` | The agent's system message |
+| `tools.md` | Tools + MCP server + skills reference |
+| `handover-template.md` | Markdown skeleton the agent fills in section-by-section |
+| `README.md` | This file |
+
+## Updates
+
+When you change any of these source files:
+- Edit the corresponding Console field; the agent_id stays the same, just the version bumps.
+- No need to re-register with Ntropii unless the agent_id itself changes.
+- If you change pip packages, update the **Environment** (not the agent).
+
+## What works today vs after N-76
 
 | Capability | Today | After N-76 |
 |---|---|---|
 | Register agent shell on Anthropic | ✓ | ✓ |
 | Register agent with Ntropii (`ntro agent create`) | ✗ (CLI subcommand not wired) | ✓ |
 | Agent invoked from a runbook step | ✗ (no `ntro.workflow.agents.invoke`) | ✓ |
-| Agent calls back into Ntropii | ✗ (no SDK / MCP bridge) | ✓ |
+| Phase 2 MCP tools (`ntro_steps_*`, `ntro_tasks_get_period`, `ntro_tasks_list_events`) | ✗ (not yet on ntro-mcp) | ✓ |
 | Run-output file passback | ✗ (no adapter) | ✓ |
 | Breadcrumb child steps from agent | ✗ (no StepEvent ingress) | ✓ |

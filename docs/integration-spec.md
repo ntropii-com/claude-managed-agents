@@ -2,70 +2,84 @@
 
 The contract a Claude MA satisfies when it integrates with Ntropii. Stable; agent code that follows this works regardless of which Ntropii tenant invokes it.
 
-## 1. Runtime environment
+## 1. Anthropic-side shape
 
-When Ntropii invokes a Claude MA, it sets these env vars in the agent's Python execution environment:
+Three Anthropic objects need to exist on Anthropic's platform before a Claude MA can run against Ntropii:
 
-| Var | Source | Notes |
+| Object | Carries | Notes |
 |---|---|---|
-| `NTRO_API_KEY` | Returned by `ntro agent create` once at registration; you copy it into the Console's Environment tab | Workspace-scoped API key. Required. |
-| `NTRO_TENANT_URL` | Tenant URL (e.g. `https://byng.test.ntropii.com/v1`); set in the Console once at registration | Required. |
-| `NTRO_SESSION_ID` | Set per-Run by Ntropii's Anthropic adapter (Phase 2 / N-76) | Identifies the current invocation. The SDK reads this implicitly — your code does not pass it explicitly. |
+| **Environment** | `pip` packages, `npm` packages, networking, metadata | Independent of any specific Agent. Reusable across agents. |
+| **Agent** | `name`, `model`, `system`, `tools`, `mcp_servers`, `skills`, `description`, `metadata` | The agent definition. References MCP servers + skills, but NOT environment / vault directly. |
+| **Vault** | API keys + secrets | Holds the Ntropii API key. Referenced at session creation. |
 
-The SDK reads these env vars at module import. Auth is automatic.
+A session is then started with `{agent_id, environment_id, vault_ids[]}`. Anthropic's runtime injects the vault's secrets into MCP server auth (and only there — they don't appear as env vars in the bash sandbox).
 
-## 2. Toolset + dependencies
+## 2. The two transports
 
-Claude Managed Agents expose a single unified toolset (`agent_toolset_20260401`) with sub-tools you enable selectively. There is no separate Python sandbox tool and no native docx/xlsx/pdf skill — agents do everything via `bash`-invoked Python scripts.
+Ntropii integration uses **both** an MCP server (for auth-required calls) and pip packages (for sandbox-side helpers). They serve different roles.
 
-Recommended tools for a Ntropii agent:
+### MCP transport — `ntro-mcp`
 
-| Tool | Why |
-|---|---|
-| `bash` | Run `python …` and any system commands |
-| `write` | Persist Python scripts and intermediate artefacts (markdown drafts, JSON dumps) to the sandbox filesystem |
-| `read` | Read intermediates between steps |
+The Ntropii MCP server exposes all tools that hit the workspace API:
 
-Do not enable `web_fetch` / `web_search` / `computer` unless your agent genuinely needs them — they add latency and risk.
+- Existing tools: `ntro_task_get`, `ntro_task_next_step`, `ntro_task_file_ingest`, `ntro_runbook_get`, `ntro_workflow_run`, etc.
+- Phase 2 agent-runtime tools: `ntro_steps_define`, `ntro_steps_progress`, `ntro_steps_request_file`, `ntro_steps_request_approval`, `ntro_tasks_get_period`, `ntro_tasks_list_events`, `ntro_tasks_list_files`.
 
-Required pip dependency: `ntro>=0.2.0` (Phase 2 / N-76 release) for the `ntro.workflow.*` SDK. Add domain-specific deps as needed (e.g. `python-docx`, `openpyxl`, `pandas`).
+Auth happens at session start: the Vault holding the Ntropii API key is referenced by the session, and Anthropic's runtime injects it into MCP server auth headers automatically. The agent doesn't see or pass the key.
+
+In the agent's `tools`, declare:
+```yaml
+- type: mcp_toolset
+  mcp_server_name: ntropii
+```
+
+In the agent's `mcp_servers`:
+```yaml
+- type: url
+  name: ntropii
+  url: https://mcp.ntropii.com/v1
+```
+
+### pip transport — sandbox-side `ntro` + `python-docx`
+
+The Environment's pip packages get installed in the agent's bash Python sandbox. These are for **non-auth-requiring** local work:
+
+- `ntro` — types (`ntro.types.wire.StepEvent`, `ntro.subledger.types.*`), local data utilities. Useful for validating MCP responses against typed Pydantic models.
+- `python-docx` — render the final .docx in the sandbox. Alternative to using Anthropic's pre-built `docx` skill.
+
+The Phase 2 SDK methods (`ntro.workflow.steps.*`, etc.) aren't strictly needed in the pip package — same surface lives on the MCP server. Future ntro releases may add a thin Python wrapper over the MCP server for ergonomic typing, but that's not a Phase 2 blocker.
 
 ## 3. Lifecycle
 
 A Claude MA invocation is a single Anthropic Run started by Ntropii's adapter (worker-side). Within a Run, the agent:
 
-1. **Declares its plan** via `ntro.workflow.steps.define([{id, title, icon}, ...])`. This populates the Ntropii breadcrumb so the human user sees what the agent is doing in real time. Each declared id can be progressed individually below the parent step in the breadcrumb.
-2. **Reads task context** via `ntro.workflow.tasks.get_period()`, `list_events()`, `list_files()`. The data is whatever the Ntropii task has at this point — TB, journal proposal, ingested documents, the StepEvent stream from the parent runbook.
-3. **Progresses each step** via `ntro.workflow.steps.progress(step_id, status, payload?, display_hint?)`. Status values: `active`, `completed`, `failed`. Payload + display_hint are optional and surface in the breadcrumb's drill-in.
-4. **Optionally requests human input** via `ntro.workflow.steps.request_file(...)` (gates the run waiting on a file upload) or `request_approval(...)` (gates waiting on approve/reject). The SDK call returns when the human responds.
-5. **Attaches output files** to the Anthropic Run output. Ntropii's adapter automatically pulls them at Run completion and persists to the tenant data plane (`ingest.submitted_documents` with `source='agent_output:<agent_id>'`). The agent does NOT call any Ntropii persist/upload function.
+1. **Declares its plan** by calling `ntro_steps_define` MCP tool with `[{id, title, icon}, ...]`. This populates the Ntropii breadcrumb so the human sees what the agent is doing in real time.
+2. **Reads task context** by calling `ntro_tasks_get_period`, `ntro_tasks_list_events`, `ntro_tasks_list_files`. These return the period summary, the parent task's StepEvent stream, and the index of files attached to the task.
+3. **Progresses each step** by calling `ntro_steps_progress(step_id, status, payload?, display_hint?)`. Status values: `active`, `completed`, `failed`.
+4. **Optionally requests human input** via `ntro_steps_request_file(...)` (waits on file upload) or `ntro_steps_request_approval(...)` (waits on approve/reject). The MCP call returns when the human responds.
+5. **Renders + attaches output files** to the Anthropic Run output. The agent uses python-docx (or Anthropic's `docx` skill) to render the file in `/tmp/`, then attaches it via Anthropic's standard Run-output mechanism. Ntropii's adapter pulls the attachment at Run completion and persists to the tenant data plane.
 6. **Returns a one-line summary** as its final assistant message. Ntropii surfaces it in the parent runbook step's HITL review screen.
 
 ## 4. File passback
 
-The agent produces files (.docx, .xlsx, .pdf, .csv, etc.) by:
+The agent does NOT push files to Ntropii directly. Instead:
 
-1. Generating the file in its sandbox (e.g. `python-docx` writes to `/tmp/foo.docx`).
-2. Attaching the file to its Run output (Anthropic's standard mechanism — the file shows up in the Run's `output.files`).
+1. Agent generates the file in its sandbox (e.g. `python-docx` writes to `/tmp/foo.docx`).
+2. Agent attaches the file to its Run output (Anthropic's standard mechanism).
+3. Ntropii's worker-side Anthropic adapter polls the Run; on completion it fetches each attached file via Anthropic's Files API and persists each via `ntro.ingest.insert_submitted_document(...)` (`source='agent_output:<agent_id>'`).
+4. The persisted FileRefs come back to the calling runbook step as `AgentResult.output_files`, which flows to downstream HITL review steps via Temporal data.
 
-Ntropii's worker-side Anthropic adapter:
-
-1. Polls the Run for completion.
-2. On completion, fetches each attached file via Anthropic's Files API.
-3. Persists each via `ntro.ingest.insert_submitted_document(...)` to the tenant data plane.
-4. Returns the persisted FileRefs to the calling runbook step as `AgentResult.output_files`.
-
-The agent does **not** call `ntro.workflow.files.persist(...)` — that helper does not exist in Phase 2. File passback is exclusively adapter-driven.
+There is no `ntro.workflow.files.persist(...)` MCP tool or SDK method. File passback is exclusively adapter-driven.
 
 ## 5. Error semantics
 
-- **Deterministic-input failures** (pydantic ValidationError, ValueError on bad inputs, etc.) raised inside the SDK reach the worker layer; the worker converts them into non-retryable `ApplicationError`s so the Run fails fast rather than retrying forever. The agent does not need to wrap these.
-- **Transient errors** (network, rate limit) are retried per the activity's retry policy.
-- **Agent-side exceptions** in the Python sandbox should be surfaced in the agent's final assistant message AND should NOT mark a step `completed` it didn't actually finish. Use `progress(step_id, "failed", payload={"error": "..."})` to indicate failure cleanly.
+- **Deterministic-input failures** (pydantic ValidationError, ValueError on bad inputs, etc.) raised inside Ntropii activities reach the worker layer; the worker converts them into non-retryable `ApplicationError`s so the Run fails fast rather than retrying forever. The agent does not need to wrap these.
+- **Transient errors** (network, rate limit on the MCP transport) are retried per the activity's retry policy.
+- **Agent-side exceptions** in the Python sandbox should be surfaced in the agent's final assistant message AND should NOT mark a step `completed` it didn't actually finish. Use `ntro_steps_progress(step_id, "failed", payload={"error": "..."})` to indicate failure cleanly.
 
 ## 6. What the agent does NOT do
 
-- **Tenant or entity routing.** The current invocation is implicit via `NTRO_SESSION_ID` — agents do not select tenants or entities.
-- **Direct DB access.** All data access is via `ntro.workflow.tasks.*` HTTP calls. There is no DB connection from the agent's sandbox.
-- **Cross-task visibility.** An agent sees only the period+task it was invoked for, not other tenants/entities/historical runs (unless the SDK surface is extended).
+- **Tenant or entity routing.** The current invocation is implicit via the session — agents do not select tenants or entities.
+- **Direct DB access.** All data access is via the MCP server. There is no DB connection from the agent's sandbox.
+- **Cross-task visibility.** An agent sees only the period+task it was invoked for.
 - **Schema authoring.** Agents fill in deterministic templates; they do not invent data shapes.

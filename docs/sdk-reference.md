@@ -1,117 +1,129 @@
-# SDK reference — `ntro.workflow.*` for Claude Managed Agents
+# Ntropii MCP tool reference (for Claude Managed Agents)
 
-The runtime API a Claude MA imports from the published `ntro` package (PyPI, ≥ 0.2.0) to drive a Ntropii task. All methods are async; auth + session resolution are implicit via env vars (`NTRO_API_KEY`, `NTRO_TENANT_URL`, `NTRO_SESSION_ID`).
+The MCP tool surface a Claude MA invokes to drive a Ntropii task. Auth is handled by Anthropic's runtime via the Vault attached at session start — agents do not pass API keys explicitly.
 
 This page is the agent-author-facing surface only. Worker-side wiring (the Anthropic adapter, sessions table, api-tenant `/events` ingress) is documented in the Ntropii internal repos.
 
 ## Status
 
-Phase 2 / [N-76](https://linear.app/byng/issue/N-76). Not yet in the published `ntro` 0.1.0 — agents that use these methods cannot complete a Run end-to-end until N-76 ships and `ntro` 0.2.0 is on PyPI.
+Phase 2 / [N-76](https://linear.app/byng/issue/N-76). Existing ntro-mcp tools (`ntro_task_*`, `ntro_runbook_*`, etc.) are live; the Phase 2 agent-runtime tools (`ntro_steps_*`, `ntro_tasks_get_period`, `ntro_tasks_list_events`) are scoped under N-76 section C.
 
 ---
 
-## `ntro.workflow.steps`
+## Steps tools — `ntro_steps_*`
 
 Drive the Ntropii breadcrumb. Steps the agent declares appear nested under the parent runbook step.
 
-### `define(steps: list[dict]) -> None`
+### `ntro_steps_define(steps: list[dict]) -> None`
 
 Declare the agent's plan. Call once at the start of the Run.
 
-```python
-await ntro.workflow.steps.define([
+```json
+{
+  "steps": [
     {"id": "read_period",    "title": "Read period data",         "icon": "BookOpen"},
     {"id": "draft_markdown", "title": "Draft handover narrative", "icon": "FileText"},
-    {"id": "render_docx",    "title": "Render handover .docx",    "icon": "Download"},
-])
+    {"id": "render_docx",    "title": "Render handover .docx",    "icon": "Download"}
+  ]
+}
 ```
 
 Each step entry: `{id, title, icon?}`. Icons are [Lucide](https://lucide.dev) names; the UI falls back to a default if unknown.
 
-### `progress(step_id: str, status: str, payload: dict | None = None, display_hint: dict | None = None) -> None`
+### `ntro_steps_progress(step_id, status, payload?, display_hint?) -> None`
 
 Update a step's status. Statuses: `active`, `completed`, `failed`.
 
-```python
-await ntro.workflow.steps.progress(
-    "read_period", "completed",
-    payload={"period": "2026-03", "entity": "4-high-court-limited"},
-)
+```json
+{
+  "step_id": "read_period",
+  "status": "completed",
+  "payload": {"period": "2026-03", "entity": "4-high-court-limited"}
+}
 ```
 
 `payload` is free-form JSON surfaced in the breadcrumb drill-in. `display_hint` (optional) controls how the payload renders — e.g. `{"component": "DATA_TABLE", "config": {...}}` to render a table.
 
-### `request_file(*, source: str, schema: str, **kwargs) -> FileRef`
+### `ntro_steps_request_file(source, schema, ...) -> FileRef`
 
-Open a HITL gate that asks the human user to upload a file matching the given source/schema labels. The call awaits the upload and returns when the file is ingested.
+Open a HITL gate that asks the human user to upload a file matching the given source/schema labels. The call blocks until the upload is ingested.
 
-```python
-ref = await ntro.workflow.steps.request_file(
-    source="zenko-rent-roll",
-    schema="rent-roll-zenko",
-)
+```json
+{"source": "zenko-rent-roll", "schema": "rent-roll-zenko"}
 ```
 
-### `request_approval(payload: dict, display_hint: dict | None = None) -> dict`
+### `ntro_steps_request_approval(payload, display_hint?) -> dict`
 
-Open a HITL gate that asks the user to approve or reject. The call awaits the response and returns the user's decision.
+Open a HITL gate that asks the user to approve or reject. The call blocks until the user responds.
 
-```python
-decision = await ntro.workflow.steps.request_approval(
-    payload={"draft_url": "...", "summary": "..."},
-    display_hint={"component": "DATA_TABLE", "config": {...}},
-)
-# decision = {"action": "approve" | "reject", "reason": str | None, "actedBy": str}
+```json
+{
+  "payload": {"draft_url": "...", "summary": "..."},
+  "display_hint": {"component": "DATA_TABLE", "config": {}}
+}
+```
+
+Returns:
+```json
+{"action": "approve", "reason": null, "actedBy": "user@example.com"}
 ```
 
 ---
 
-## `ntro.workflow.tasks`
+## Tasks tools — `ntro_tasks_*`
 
 Read the current task's context.
 
-### `get_period() -> dict`
+### `ntro_tasks_get_period() -> dict`
 
 Returns the period summary the parent runbook has accumulated so far.
 
-```python
-period = await ntro.workflow.tasks.get_period()
-# {
-#   "entity": {"id": "...", "slug": "4-high-court-limited", "name": "...", "currency": "GBP"},
-#   "period": "2026-03",
-#   "tb": {"opening_total": ..., "closing_total": ..., "lines": [...]},
-#   "journal_proposal": {"lines": [...], "totals": {...}, "checks": {...}},
-#   "documents": [{"source": "...", "filename": "...", "document_ref": "..."}, ...],
-#   "checks": {"journal_balanced": {"status": "pass", "detail": "..."}, ...},
-# }
+```json
+{
+  "entity": {"id": "...", "slug": "4-high-court-limited", "name": "...", "currency": "GBP"},
+  "period": "2026-03",
+  "tb": {"opening_total": "...", "closing_total": "...", "lines": []},
+  "journal_proposal": {"lines": [], "totals": {}, "checks": {}},
+  "documents": [{"source": "...", "filename": "...", "document_ref": "..."}],
+  "checks": {"journal_balanced": {"status": "pass", "detail": "..."}}
+}
 ```
 
-### `list_events(*, since: str | None = None) -> list[dict]`
+### `ntro_tasks_list_events(since?: str) -> list[dict]`
 
 Returns the parent task's StepEvent stream — useful for narrating what happened during the run.
 
-```python
-events = await ntro.workflow.tasks.list_events()
-# [{"type": "step_completed", "step_id": "...", "at": "...", "payload": {...}}, ...]
+```json
+[{"type": "step_completed", "step_id": "...", "at": "...", "payload": {}}]
 ```
 
-### `list_files(*, source_prefix: str | None = None) -> list[dict]`
+### `ntro_tasks_list_files(period?: str, source_prefix?: str) -> list[dict]`
 
 Enumerate files attached to the current task in the tenant data plane.
 
-```python
-files = await ntro.workflow.tasks.list_files(source_prefix="zenko-")
-# [{"id": "...", "filename": "...", "source": "zenko-rent-roll", "uploaded_at": "..."}, ...]
+```json
+[{"id": "...", "filename": "...", "source": "zenko-rent-roll", "uploaded_at": "..."}]
 ```
 
 ---
 
-## What is NOT in the SDK
+## Existing tools the agent can use
 
-These deliberately don't exist. If you need them, document the use case and the SDK can be extended.
+All current ntro-mcp tools work too — see the live ntro-mcp tool list. Useful ones for agents:
 
-- **`files.persist(bytes, ...)` (agent push):** file passback is adapter-driven (attach file to Run output, Ntropii pulls it at completion). Agents don't push.
-- **`files.read(ref) -> bytes` (agent pull):** the period summary already includes the documents the agent needs; if you need to dig into a specific PDF's bytes, propose adding `tasks.read_document(ref)`.
+- `ntro_runbook_get(slug)` — read a runbook's config schema (rare; the period summary usually has what you need)
+- `ntro_task_get(task_id?)` — same task summary, lower-level
+- `ntro_task_next_step(task_id?)` — generic action loop (mostly used by Claude Code on the human side)
+
+If `task_id` is omitted, MCP tools resolve to the current session's task automatically — agents don't need to track ids.
+
+---
+
+## What is NOT exposed
+
+These deliberately don't exist. If you need them, document the use case and the surface can be extended.
+
+- **`ntro_files_persist(bytes, ...)` (agent push):** file passback is adapter-driven (attach file to Run output, Ntropii pulls it at completion). Agents don't push.
 - **Cross-task / cross-tenant queries:** an agent sees only the task it was invoked for.
 - **GL writes / journal commits:** posting journals is the runbook's responsibility, not the agent's.
 
@@ -119,4 +131,4 @@ These deliberately don't exist. If you need them, document the use case and the 
 
 ## Worked example
 
-See [`agents/audit-handover/system-prompt.md`](../agents/audit-handover/system-prompt.md) for a complete agent that uses `define` + `progress` + `tasks.get_period` + `tasks.list_events` to produce a .docx output.
+See [`agents/audit-handover/system-prompt.md`](../agents/audit-handover/system-prompt.md) for a complete agent that uses `ntro_steps_*` + `ntro_tasks_get_period` + `ntro_tasks_list_events` to produce a .docx output.

@@ -1,36 +1,30 @@
 # Anthropic Managed Agent — audit-handover
 #
-# Field names match Anthropic's POST /v1/agents body shape so this file
-# can be used as direct reference when filling the Console form (or
-# imported via the API). See README.md for both paths.
-#
-# IMPORTANT: pip dependencies + environment variables are NOT
-# first-class fields in the Managed Agents create body. This is a
-# known architectural gap for the Phase 2 SDK-over-pip approach (see
-# README.md → "Open: how the agent gets ntro + auth env"). Fields
-# below are exactly what `POST /v1/agents` accepts today.
+# Field names match Anthropic's POST /v1/agents body shape. Pip
+# packages, networking, and metadata live on a separate Environment
+# object (see README.md → "Setup checklist") and are NOT in this file.
+# Auth (Ntropii API key) lives in a Vault, referenced at session
+# creation — there are no environment variables in Managed Agents.
 
 name: audit-handover
 
 description: |
   Produces a Ntropii-style auditor handover .docx for a completed NAV
-  close. Reads task-level outputs (TB, journal proposal, documents
-  index, step events) via the ntro-python SDK and renders a structured
-  narrative document. PoC scope — single-pass, short sections.
+  close. Calls Ntropii's MCP server for task-level context (TB,
+  journal proposal, documents index, step events) and renders a
+  structured narrative document via python-docx in the bash sandbox.
+  PoC scope — single-pass, short sections.
 
-# Claude Sonnet is sufficient for narrative summarisation over already-
-# structured period data.
 model: claude-sonnet-4-6
 
 # Paste the contents of system-prompt.md into the Console's "System
 # message" field, or include it inline as a string when POSTing to
-# /v1/agents (the API expects `system: <full prompt>`, not a file ref).
+# /v1/agents (the API expects `system: <full prompt>`).
 system: |
   PASTE_SYSTEM_PROMPT_HERE
 
-# Managed Agents expose a unified toolset (no separate code_execution
-# or docx tool types). Enable bash + write + read.
 tools:
+  # Standard sandbox toolset for writing + running Python scripts.
   - type: agent_toolset_20260401
     configs:
       - name: bash
@@ -39,9 +33,29 @@ tools:
         enabled: true
       - name: read
         enabled: true
+  # MCP toolset binds the agent to the Ntropii MCP server declared
+  # below. This is how the agent calls into Ntropii — no SDK pip
+  # install, no env-var-based auth. Anthropic's runtime injects the
+  # Vault's Ntropii API key at session-start.
+  - type: mcp_toolset
+    mcp_server_name: ntropii
 
-# Tracking metadata. Not runtime-significant; useful for filtering
-# agents on the Anthropic side.
+mcp_servers:
+  # Ntropii MCP server — exposes ntro_task_*, ntro_runbook_*, plus
+  # the Phase 2 agent-runtime tools (define_steps, progress_step,
+  # request_file, request_approval, get_period, list_files,
+  # list_events). See N-76 / claude-managed-agents/docs/sdk-reference.md.
+  - type: url
+    name: ntropii
+    url: https://mcp.ntropii.com/v1   # placeholder — confirm with Ntropii ops
+
+skills:
+  # Anthropic's pre-built docx skill — richer document generation
+  # than raw python-docx authoring. The agent can use either; the
+  # docx skill auto-invokes when the task involves Word output.
+  - type: anthropic
+    skill_id: docx
+
 metadata:
   ntropii_purpose: audit-handover
   ntropii_phase: "2"
