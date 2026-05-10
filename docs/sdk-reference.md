@@ -6,7 +6,7 @@ This page is the agent-author-facing surface only. Worker-side wiring (the Anthr
 
 ## Status
 
-Phase 2 / Linear N-76. Existing ntro-mcp tools (`ntro_task_*`, `ntro_runbook_*`, etc.) are live; the Phase 2 agent-runtime tools (`ntro_steps_*`, `ntro_tasks_get_period`, `ntro_tasks_list_events`) are scoped under N-76 section C.
+Existing ntro-mcp tools (`ntro_task_*`, `ntro_runbook_*`, etc.) are live. Additional agent-runtime tools (`ntro_steps_*`, `ntro_tasks_get_period`, `ntro_tasks_list_events`) are not required for v1 — the runbook supplies the period summary as the agent's input message.
 
 ---
 

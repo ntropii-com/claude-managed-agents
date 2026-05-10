@@ -46,11 +46,11 @@ Two transports the agent uses:
 
 ## Status
 
-The architecture is locked: MCP for auth-required calls, pip for sandbox-side helpers, Vaults for secrets, Environments for runtime config. The Phase 2 work tracked in Linear N-76 is:
+The architecture is locked: MCP for auth-required calls, pip for sandbox-side helpers, Vaults for secrets, Environments for runtime config. Outstanding integration work on the Ntropii side:
 
-- Extending **ntro-mcp** with the agent-runtime tools (`ntro_steps_*`, `ntro_tasks_*`).
-- Building the **Anthropic adapter** in ntro-worker that starts sessions, polls Run output, and persists agent-output files.
+- The **Anthropic adapter** in ntro-worker that starts sessions, polls Run output, and persists agent-output files.
 - Wiring the adapter from `ntro.workflow.agents.invoke` (the runbook-side helper).
+- Optional: extending **ntro-mcp** with agent-runtime tools (`ntro_steps_*`, `ntro_tasks_*`) for richer breadcrumb feedback.
 
 The pip `ntro` package's role is supplemental (typed models for MCP responses, sandbox helpers). The agent's process loop is fully driven by MCP tools — the agent does not need a new pip release to function. A future `ntro` release may add a thin Python wrapper over the MCP transport for ergonomic typing.
 
@@ -58,7 +58,7 @@ The pip `ntro` package's role is supplemental (typed models for MCP responses, s
 
 | Agent | Description | Status |
 |---|---|---|
-| [`agents/audit-handover/`](agents/audit-handover) | Produces an auditor handover .docx for a completed NAV close. First demo agent for Phase 2. | Source artefacts ready; awaiting Phase 2 ntro-mcp + adapter (N-76) |
+| [`agents/audit-handover/`](agents/audit-handover) | Produces an auditor handover .docx for a completed NAV close. First reference agent. | Source artefacts ready; awaiting Ntropii adapter |
 
 ## Adding a new agent
 

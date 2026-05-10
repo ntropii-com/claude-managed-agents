@@ -42,9 +42,9 @@ tools:
 
 mcp_servers:
   # Ntropii MCP server — exposes ntro_task_*, ntro_runbook_*, plus
-  # the Phase 2 agent-runtime tools (define_steps, progress_step,
+  # optional agent-runtime tools (define_steps, progress_step,
   # request_file, request_approval, get_period, list_files,
-  # list_events). See N-76 / claude-managed-agents/docs/sdk-reference.md.
+  # list_events). See claude-managed-agents/docs/sdk-reference.md.
   - type: url
     name: ntropii
     url: https://mcp.test.ntropii.com/v1   # test cluster ntro-mcp

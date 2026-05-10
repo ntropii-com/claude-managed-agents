@@ -23,7 +23,7 @@ Ntropii integration uses **both** an MCP server (for auth-required calls) and pi
 The Ntropii MCP server exposes all tools that hit the workspace API:
 
 - Existing tools: `ntro_task_get`, `ntro_task_next_step`, `ntro_task_file_ingest`, `ntro_runbook_get`, `ntro_workflow_run`, etc.
-- Phase 2 agent-runtime tools: `ntro_steps_define`, `ntro_steps_progress`, `ntro_steps_request_file`, `ntro_steps_request_approval`, `ntro_tasks_get_period`, `ntro_tasks_list_events`, `ntro_tasks_list_files`.
+- Optional agent-runtime tools (when richer breadcrumb / mid-run HITL is needed): `ntro_steps_define`, `ntro_steps_progress`, `ntro_steps_request_file`, `ntro_steps_request_approval`, `ntro_tasks_get_period`, `ntro_tasks_list_events`, `ntro_tasks_list_files`.
 
 Auth happens at session start: the Vault holding the Ntropii API key is referenced by the session, and Anthropic's runtime injects it into MCP server auth headers automatically. The agent doesn't see or pass the key.
 
@@ -47,7 +47,7 @@ The Environment's pip packages get installed in the agent's bash Python sandbox.
 - `ntro` — types (`ntro.types.wire.StepEvent`, `ntro.subledger.types.*`), local data utilities. Useful for validating MCP responses against typed Pydantic models.
 - `python-docx` — render the final .docx in the sandbox. Alternative to using Anthropic's pre-built `docx` skill.
 
-The Phase 2 SDK methods (`ntro.workflow.steps.*`, etc.) aren't strictly needed in the pip package — same surface lives on the MCP server. Future ntro releases may add a thin Python wrapper over the MCP server for ergonomic typing, but that's not a Phase 2 blocker.
+SDK methods (`ntro.workflow.steps.*`, etc.) aren't needed in the pip package — the same surface lives on the MCP server. Future ntro releases may add a thin Python wrapper over the MCP server for ergonomic typing, but it's not required.
 
 ## 3. Lifecycle
 
