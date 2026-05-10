@@ -1,0 +1,57 @@
+# Anthropic Managed Agent — audit-handover
+#
+# Field names match Anthropic's POST /v1/agents body shape so this file
+# can be used as direct reference when filling the Console form (or
+# imported via the API). See README.md for both paths.
+
+name: audit-handover
+
+description: |
+  Produces a Ntropii-style auditor handover .docx for a completed NAV
+  close. Reads task-level outputs (TB, journal proposal, documents
+  index, step events) via the ntro-python SDK and renders a structured
+  narrative document. PoC scope — single-pass, short sections.
+
+# Claude Sonnet is sufficient for narrative summarisation over already-
+# structured period data. Bump to Opus if the demo needs richer
+# reasoning across many supporting documents.
+model: claude-sonnet-4-6
+
+# Paste the contents of system-prompt.md into the Console's "System
+# message" field, OR include it inline here when POSTing to /v1/agents:
+#   system: |
+#     <contents of system-prompt.md>
+system_prompt_file: system-prompt.md
+
+# Managed Agents expose a unified toolset (no separate code_execution
+# or docx tool types). Enable bash + write + read so the agent can
+# write Python scripts and run them via `bash python …`.
+tools:
+  - type: agent_toolset_20260401
+    configs:
+      - name: bash
+        enabled: true
+      - name: write
+        enabled: true
+      - name: read
+        enabled: true
+
+# Pip dependencies installed in the agent's Python environment.
+# `ntro` is on PyPI (verified). `python-docx` is needed because there's
+# no native docx skill — the agent renders the .docx itself.
+#
+# NOTE: the agent's process loop calls ntro.workflow.steps.* and
+# ntro.workflow.tasks.* — those modules are Phase 2 / N-76 work, NOT
+# in the published `ntro 0.1.0`. The agent registers + provisions today
+# but cannot actually run end-to-end until N-76 ships and a new ntro
+# version is published; bump the pin then.
+execution_environment:
+  python:
+    pip:
+      - ntro>=0.1.0,<0.2.0
+      - python-docx>=1.1.0
+    env:
+      NTRO_API_KEY: <placeholder — fill from `ntro agent create` response>
+      NTRO_TENANT_URL: https://byng.test.ntropii.com/v1
+      # NTRO_SESSION_ID is set per-Run by the Ntropii adapter; leave
+      # blank or omit in the Console.
