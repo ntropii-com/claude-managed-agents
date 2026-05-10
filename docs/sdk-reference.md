@@ -6,7 +6,7 @@ This page is the agent-author-facing surface only. Worker-side wiring (the Anthr
 
 ## Status
 
-Phase 2 / [N-76](https://linear.app/byng/issue/N-76). Existing ntro-mcp tools (`ntro_task_*`, `ntro_runbook_*`, etc.) are live; the Phase 2 agent-runtime tools (`ntro_steps_*`, `ntro_tasks_get_period`, `ntro_tasks_list_events`) are scoped under N-76 section C.
+Phase 2 / Linear N-76. Existing ntro-mcp tools (`ntro_task_*`, `ntro_runbook_*`, etc.) are live; the Phase 2 agent-runtime tools (`ntro_steps_*`, `ntro_tasks_get_period`, `ntro_tasks_list_events`) are scoped under N-76 section C.
 
 ---
 
@@ -38,7 +38,7 @@ Update a step's status. Statuses: `active`, `completed`, `failed`.
 {
   "step_id": "read_period",
   "status": "completed",
-  "payload": {"period": "2026-03", "entity": "4-high-court-limited"}
+  "payload": {"period": "<period>", "entity": "<entity-slug>"}
 }
 ```
 
@@ -80,7 +80,7 @@ Returns the period summary the parent runbook has accumulated so far.
 
 ```json
 {
-  "entity": {"id": "...", "slug": "4-high-court-limited", "name": "...", "currency": "GBP"},
+  "entity": {"id": "...", "slug": "<entity-slug>", "name": "...", "currency": "GBP"},
   "period": "2026-03",
   "tb": {"opening_total": "...", "closing_total": "...", "lines": []},
   "journal_proposal": {"lines": [], "totals": {}, "checks": {}},

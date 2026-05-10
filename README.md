@@ -46,7 +46,7 @@ Two transports the agent uses:
 
 ## Status
 
-The architecture is locked: MCP for auth-required calls, pip for sandbox-side helpers, Vaults for secrets, Environments for runtime config. The Phase 2 work tracked in [Linear N-76](https://linear.app/byng/issue/N-76) is:
+The architecture is locked: MCP for auth-required calls, pip for sandbox-side helpers, Vaults for secrets, Environments for runtime config. The Phase 2 work tracked in Linear N-76 is:
 
 - Extending **ntro-mcp** with the agent-runtime tools (`ntro_steps_*`, `ntro_tasks_*`).
 - Building the **Anthropic adapter** in ntro-worker that starts sessions, polls Run output, and persists agent-output files.

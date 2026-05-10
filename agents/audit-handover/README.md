@@ -41,7 +41,7 @@ After creation, capture the resulting `agent_id` (e.g. `agent_01HX…`).
 ```bash
 ntro agent create \
   --path "anthropic://agents/<agent_id>" \
-  --tenant byng \
+  --tenant <tenant-slug> \
   --name audit-handover
 ```
 
@@ -60,11 +60,11 @@ Take the `apiKey` and store it in the **Vault** from step 1. Anthropic's runtime
 
 ### 5. Wire into nav-monthly-pack
 
-Add the agent id to byng's 4HC entity config so the runbook step picks it up:
+Add the agent id to your entity's config so the runbook step picks it up:
 
 ```bash
 # In the workspace API:
-# PATCH /workspace/tenants/<byng>/entities/<4hc> with config.audit_agent_id=<id>
+# PATCH /workspace/tenants/<tenant-id>/entities/<entity-id> with config.audit_agent_id=<id>
 ```
 
 The runbook's `draft_auditor_handover` step reads `ctx.config.audit_agent_id` and calls `ntro.workflow.agents.invoke(...)`. Ntropii's worker-side Anthropic adapter starts the session with `{agent_id, environment_id, vault_ids}` so all three are connected.
@@ -86,13 +86,3 @@ When you change any of these source files:
 - No need to re-register with Ntropii unless the agent_id itself changes.
 - If you change pip packages, update the **Environment** (not the agent).
 
-## What works today vs after N-76
-
-| Capability | Today | After N-76 |
-|---|---|---|
-| Register agent shell on Anthropic | ✓ | ✓ |
-| Register agent with Ntropii (`ntro agent create`) | ✗ (CLI subcommand not wired) | ✓ |
-| Agent invoked from a runbook step | ✗ (no `ntro.workflow.agents.invoke`) | ✓ |
-| Phase 2 MCP tools (`ntro_steps_*`, `ntro_tasks_get_period`, `ntro_tasks_list_events`) | ✗ (not yet on ntro-mcp) | ✓ |
-| Run-output file passback | ✗ (no adapter) | ✓ |
-| Breadcrumb child steps from agent | ✗ (no StepEvent ingress) | ✓ |

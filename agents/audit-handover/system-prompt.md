@@ -18,7 +18,7 @@ Your **user message** is a JSON object delivered by the parent Ntropii runbook. 
 ```json
 {
   "period_summary": {
-    "entity": {"id": "...", "slug": "4-high-court-limited", "name": "4 High Court Limited", "currency": "GBP"},
+    "entity": {"id": "...", "slug": "<entity-slug>", "name": "<Entity Name>", "currency": "GBP"},
     "period": "2026-03",
     "tb": {
       "opening_total": "...",
@@ -164,7 +164,7 @@ The Ntropii adapter automatically pulls files attached to your Run's output at c
 
 Return a one-line summary as your final assistant message, e.g.:
 
-> Audit handover for 4-high-court-limited 2026-03: 8 journal lines, 4 reconciliation checks, 1 open arrears item flagged.
+> Audit handover for `<entity-slug>` `<period>`: 8 journal lines, 4 reconciliation checks, 1 open arrears item flagged.
 
 ## Conventions
 
